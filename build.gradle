@@ -1,0 +1,288 @@
+import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform
+
+buildscript {
+    repositories {
+        maven {
+            url "https://repo1.maven.org/maven2/"
+        }
+    }
+    dependencies {
+        classpath "com.google.cloud.tools:appengine-gradle-plugin:2.4.2"
+    }
+}
+
+plugins {
+    id "org.springframework.boot" version "2.7.1"
+    id "io.spring.dependency-management" version "1.0.11.RELEASE"
+    id "java"
+    id "jacoco"
+    id "org.sonarqube" version "3.3"
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+
+    providedCompile
+    compile {
+        exclude group: 'com.google.collections'
+        exclude module: 'google-collections'
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+/** code snippet is to disable jar generation for the root project starts here **/
+bootJar {
+    enabled = false
+}
+
+jar {
+    enabled = false
+}
+/** code snippet is to disable jar generation for the root project ends here **/
+
+
+/** project configurations **/
+allprojects {
+
+    group = 'com.yocoboard'
+    version = '1.0-SNAPSHOT'
+
+    apply plugin: "jacoco"
+
+    jacoco {
+        toolVersion = "0.8.5"
+    }
+
+}
+
+/** sonar configuration **/
+
+def sonarUrl = project.findProperty('mode') == 'local' ?  "http://localhost:9000"  : "https://sonar.anywhere.co"
+def sonarToken
+
+if(project.findProperty('mode') == 'local'){  // run locally
+    sonarToken = project.findProperty("LOCAL_SONAR_TOKEN")
+}else if(System.getenv("CI")){ //run via actions
+    sonarToken = System.getenv( "sonarToken" )
+}else{  // run manually
+    sonarToken = project.findProperty("API_SONAR_TOKEN")
+}
+
+def sonarProjectVersion = "1.3.8"
+
+sonarqube {
+
+    properties {
+        property "sonar.projectKey", "yocoboard-api"
+        property "sonar.projectName", "yocoboard-api"
+        property "sonar.host.url", sonarUrl
+        property "sonar.login", sonarToken
+        property "sonar.projectVersion", sonarProjectVersion
+        property "sonar.java.coveragePlugin" , "jacoco"
+        property "sonar.coverage.jacoco.xmlReportPaths", "$projectDir/project/build/reports/jacoco/test/jacocoTestReport.xml, "
+
+        if (System.getenv("CI")){
+            if (System.getenv("GITHUB_WORKFLOW") == "PR Validation") {
+                property "sonar.pullrequest.key", System.getenv("PR_ID")
+                property "sonar.pullrequest.base", System.getenv("BASE_BRANCH")
+                property "sonar.pullrequest.branch", System.getenv("HEAD_BRANCH")
+            } else {
+                property "sonar.branch.name", "master"
+            }
+        } else {// manual scan - uncomment and update values as required
+            //base branch scan
+//            property "sonar.branch.name", "master"
+
+            //PR decoration
+//            property "sonar.pullrequest.key", ""
+//            property "sonar.pullrequest.base", ""
+//            property "sonar.pullrequest.branch", ""
+        }
+    }
+}
+
+/** module configurations **/
+subprojects {
+
+    apply plugin: "com.google.cloud.tools.appengine"
+    apply plugin: "org.springframework.boot"
+    apply plugin: "io.spring.dependency-management"
+    apply plugin: "java"
+    apply plugin: "idea"
+
+    repositories {
+        maven {
+            url "https://repo1.maven.org/maven2/"
+        }
+        maven {
+            url = uri("https://maven.pkg.github.com/Adaptavant/*")
+            credentials {
+
+                if( System.getenv( "GITHUB_WORKFLOW" ) ){
+                    username = "ci-cd-full"
+                    password = System.getenv( "packageToken" )
+                }else{
+                    username = project.findProperty("GITHUB_USERNAME")
+                    password = project.findProperty("GITHUB_TOKEN")
+                }
+            }
+        }
+    }
+
+    dependencies {
+
+        compileOnly group: 'javax.servlet', name: 'javax.servlet-api', version: '3.1.0'
+
+        compileOnly 'org.projectlombok:lombok:1.18.22'
+        annotationProcessor 'org.projectlombok:lombok:1.18.22'
+
+        implementation('org.springframework.boot:spring-boot-starter-web') {
+            exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'
+        }
+
+        implementation 'org.springframework.boot:spring-boot-starter-security'
+        implementation "org.springframework.boot:spring-boot-starter-jetty"
+
+        implementation ("org.springframework.boot:spring-boot-starter-freemarker"){
+            exclude group: 'org.yaml', module:'snakeyaml'
+            implementation 'org.yaml:snakeyaml:1.32'
+        }
+
+        implementation group: 'org.springframework.cloud', name: 'spring-cloud-gcp-starter-logging', version: '1.2.8.RELEASE'
+        
+        // full OAuth
+        implementation group: 'co.anywhere', name: 'fullauth', version: '1.5.0'
+
+//        //access policy
+//        implementation group: 'co.anywhere', name: 'fullauth-manage', version: '1.4.3'
+
+        // full metrics
+        implementation group: 'co.anywhere', name: 'fullmetrics-api', version: '0.3.6'
+
+        //full metrics async push helper
+        implementation group: 'co.anywhere', name: 'fullmetrics-helper', version: '0.2.3'
+
+        //full reminders
+        implementation group: 'co.anywhere', name: 'full-reminders', version: '0.2.7'
+
+        //awConfigurator
+        implementation group: 'co.anywhere', name: 'awconfigurator', version: '0.1'
+
+        implementation group: 'com.itextpdf', name: 'itextpdf', version: '5.5.13'
+
+
+        //cloud KMS
+        implementation ('com.google.apis:google-api-services-cloudkms:v1-rev108-1.25.0'){
+            exclude group: 'com.google.oauth-client', module: 'google-oauth-client'
+            exclude group: 'com.fasterxml.jackson.core', module: 'jackson-core'
+            implementation 'com.fasterxml.jackson.core:jackson-core:2.13.2'
+            implementation 'com.google.oauth-client:google-oauth-client:1.33.3'
+        }
+
+        implementation('org.springframework.cloud:spring-cloud-gcp-starter-pubsub:1.2.8.RELEASE'){
+            exclude group: 'com.google.protobuf', module: 'protobuf-java'
+            implementation 'com.google.protobuf:protobuf-java:3.19.4'
+        }
+
+        implementation group: 'org.json', name: 'json', version: '20220320'
+
+        implementation group: 'com.sendgrid', name: 'sendgrid-java', version: '4.9.0'
+
+        implementation 'com.googlecode.libphonenumber:libphonenumber:8.12.46'
+
+        testImplementation('org.springframework.boot:spring-boot-starter-test') {
+            exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+            exclude group: "com.vaadin.external.google", module:"android-json"
+            testImplementation 'org.mockito:mockito-inline:3.6.0'
+        }
+
+    }
+
+    test {
+        useJUnitPlatform()
+    }
+
+    task wrapper(type: Wrapper) {
+        gradleVersion = '7.3'
+    }
+
+    sonarqube {
+        properties {
+            property "sonar.sources", "$projectDir/src/main/java"
+            property "sonar.tests", "$projectDir/src/test/java"
+            property "sonar.coverage.exclusions", "$projectDir/src/main/java/com/yoco/commons/config/AppConfig.java"
+        }
+    }
+
+}
+
+/** merge code coverage report from all modules **/
+tasks.register("codeCoverageReport", JacocoReport) {
+
+    subprojects { subproject ->
+
+        subproject.plugins.withType(JacocoPlugin).configureEach {
+
+            subproject.tasks.matching( { t -> t.extensions.findByType(JacocoTaskExtension) }).configureEach { testTask ->
+                sourceSets subproject.sourceSets.main
+                executionData(testTask)
+            }
+
+            // To automatically run `test` every time `./gradlew codeCoverageReport` is called,
+            // you may want to set up a task dependency between them as shown below.
+
+            subproject.tasks.matching({ t -> t.extensions.findByType(JacocoTaskExtension) }).forEach {
+                rootProject.tasks.codeCoverageReport.dependsOn(it)
+            }
+        }
+    }
+
+    reports {
+        xml.enabled true
+        html.enabled true
+    }
+}
+
+static def isStagingMode ( projectId ){
+    return projectId == "staging-goclockin-dashboard"
+}
+static def getVpcConnectorNameConfig (boolean isStagingMode ){
+    return "  name: " + (isStagingMode ?  "projects/commonstore/locations/us-central1/connectors/memstoreconnect" : "projects/live-goclockin-dashboard/locations/us-central1/connectors/yococonnector")
+}
+static def getMemstoreDatabaseConfig (boolean isStagingMode ){
+    return "spring.redis.database=" + (isStagingMode ?  "11" : "0")
+}
+static def getMemstorePortConfig (boolean isStagingMode ){
+    return "spring.redis.port=" + (isStagingMode ?  "6379" : "6379")
+}
+static def getMemstoreHostConfig(boolean isStagingMode) {
+    return "spring.redis.host=" + (isStagingMode ?  "10.249.206.164" : "10.90.76.180")
+}
+
+static def getCurrentWorkingModule(){
+    String currentWorkingDirPath = System.getProperty("user.dir");
+    String splitCharacter = isOsWindows() ? "\\\\" : "/";
+    String[] paths = currentWorkingDirPath.split(splitCharacter);
+    return paths[paths.length -1];
+}
+static def isOsWindows(){
+    String os = DefaultNativePlatform.currentOperatingSystem;
+    return os.toLowerCase().contains("windows");
+}
+
+ext.setMemstoreConfigProps = { projectId, module ->
+    if(getCurrentWorkingModule() == module){
+        def isStaging = isStagingMode(projectId)
+        ant.replaceregexp(file: "${buildDir}/../${module}/src/main/appengine/app.yaml", match: "^  name(.*)",byline:true, replace: getVpcConnectorNameConfig(isStaging))
+        ant.replaceregexp(file: "${buildDir}/../commons/src/main/resources/application.properties", match: "^spring.redis.database=(.*)", byline:true, replace: getMemstoreDatabaseConfig(isStaging))
+        ant.replaceregexp(file: "${buildDir}/../commons/src/main/resources/application.properties", match: "^spring.redis.host=(.*)", byline:true, replace: getMemstoreHostConfig(isStaging))
+        ant.replaceregexp(file: "${buildDir}/../commons/src/main/resources/application.properties", match: "^spring.redis.port=(.*)", byline:true, replace: getMemstorePortConfig(isStaging))
+    }
+}
+
+test.dependsOn codeCoverageReport

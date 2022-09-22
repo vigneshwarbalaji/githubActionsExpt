@@ -1,0 +1,56 @@
+
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(11))
+    }
+}
+
+dependencies {
+
+    implementation project(':commons')
+
+    // include module specific dependencies here
+}
+
+/** deploy configuration **/
+appengine {
+
+    def gae_projectID = System.getProperty('name') != null ? System.getProperty('name') : 'live-goclockin-dashboard'
+    def gae_version = System.getProperty('version') != null ? System.getProperty('version') : 'testreportcheck1'
+
+    rootProject.ext.setMemstoreConfigProps(gae_projectID,project.name)
+
+    deploy {
+        stopPreviousVersion = false
+        promote = false
+        projectId = gae_projectID
+        version = gae_version
+    }
+
+    stage {
+        artifact = "${buildDir}/libs/report-1.0-SNAPSHOT.jar"
+    }
+
+}
+
+jacocoTestReport {
+    dependsOn test // tests are required to run before generating the report
+    reports {
+        xml.enabled true
+        html.enabled true
+    }
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, includes: ['com/yoco/**'])
+        }))
+    }
+}
+
+test {
+    finalizedBy jacocoTestReport // report is always generated after tests run
+}
