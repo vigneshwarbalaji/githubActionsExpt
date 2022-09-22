@@ -1,0 +1,26 @@
+
+runtime: java11
+
+entrypoint: java -XX:+UseStringDeduplication -jar account-1.0-SNAPSHOT.jar -Dserver.port=8080
+
+service : account
+
+# please change the instance to F1 when it is deployed to alpha/ beta
+instance_class: F2
+
+inbound_services:
+  - warmup
+
+vpc_access_connector:
+  name: projects/live-goclockin-dashboard/locations/us-central1/connectors/yococonnector
+
+handlers:
+  - url: /.*
+    script: this field is required, but ignored
+    secure: always
+
+automatic_scaling:
+  min_idle_instances: 0
+  max_concurrent_requests: 60
+  target_throughput_utilization: 0.75
+  target_cpu_utilization: 0.75

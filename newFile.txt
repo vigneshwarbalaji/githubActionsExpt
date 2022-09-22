@@ -1,2 +1,0 @@
-Just a normal readme file
-Feature branch checkout 

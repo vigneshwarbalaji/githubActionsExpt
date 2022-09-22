@@ -1,0 +1,5 @@
+rootProject.name = 'YoCoBoard'
+include 'commons'
+include 'project'
+include 'account'
+include 'report'
